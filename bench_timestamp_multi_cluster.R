@@ -5,7 +5,7 @@ library(tidyr)
 library(dplyr)
 
 
-bench <- function(bench_name, pod_vector, path_file, cluster_vector){
+bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector){
   
   # parametres en durs pour les tests
   # bench_name <- "Spanner bench - request per second"
@@ -109,34 +109,8 @@ bench <- function(bench_name, pod_vector, path_file, cluster_vector){
 
 }
 #bench function call
-bench(bench_name = "Spanner bench regional - request per second", 
+bench_multicluster(bench_name = "Spanner bench regional - request per second", 
       pod_vector = c(1:3), 
       path_file = "/Users/octo-luma/Desktop/logs/27.08.18-bench-avec-lolo/bench 3 copy/application-cluster",
       cluster_vector = c(1:3))
-      #path_file = "./data/spanner_280818_bench_regional/bench8/application-pod")
 
-
-
-#sandbox
-#supperposition
-#sum of data_getproduct_c + data_insertproduct_c + data_insertorder_c, data_transactionvalidation_c
-supperposition <- data.frame(data_getproduct_c$timestamp, data_getproduct_c$res, data_insertproduct_c$res, data_insertorder_c$res, data_transactionvalidation_c$res)
-colnames(supperposition) <- c("time", "A", "B", "C", "D")
-total <- supperposition$A + supperposition$B + supperposition$C + supperposition$D
-supperposition <- data_frame(supperposition$time, total, c(1:447))
-colnames(supperposition) <- c("time", "total", "index")
-
-seq_len <- 1
-
-ggplot(supperposition[seq(1,nrow(supperposition),seq_len), ], aes(index, total)) + 
-  #Four plots
-  geom_point() +
-  geom_smooth(aes(group = 1)) +
-  #Legend
-  ggtitle("cockroach bench - request per second") + 
-  expand_limits(x = 0, y = 0) +
-  xlab("Time (second)") + 
-  ylab("Request") +
-  theme_light() 
-
-ggplotly()
