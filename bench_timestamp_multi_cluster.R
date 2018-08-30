@@ -13,11 +13,11 @@ bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector
   # pod_vector <- c(1:10)
 
   application_pod <- NULL
-  index_fichier <- pod_vector
   index_cluster <- cluster_vector
   
   #import main data files
   for(c_index in index_cluster){
+    index_fichier <- pod_vector
     for(index in index_fichier){
       application_pod[index] <- c(paste(path_file, c_index,"-pod", index, ".log", sep = ""))
     
