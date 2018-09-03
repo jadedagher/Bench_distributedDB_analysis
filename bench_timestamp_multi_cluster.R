@@ -34,7 +34,7 @@ bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector
   #subseting dataframe by action (getProductByProductId, insertProductOrder, insertOrder, transactionValidation)
   data_getproduct <- subset(bigdata, bigdata$bigdata.V7 == "getProductByProductId")
   #####WARNING#####
-  data_insertproduct <- subset(bigdata, bigdata$bigdata.V7 == "insert product order")
+  data_insertproduct <- subset(bigdata, bigdata$bigdata.V7 == "insertProductOrder")
   #data_insertproduct <- subset(bigdata, bigdata$bigdata.V7 == "insert")
   #####WARNING#####
   data_insertorder <- subset(bigdata, bigdata$bigdata.V7 == "insertOrder")
