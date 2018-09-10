@@ -40,16 +40,15 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
   }
 }
 
-## TODO ajouter valeur initiale pour récupérer seulement le palier
-
-bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector, scale_max=0, scale_min=0){
+bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector, e, scale_max=0, scale_min=0){
   
   # parametres en durs pour les tests
-  bench_name = "Spanner bench regional - request per second" 
-  pod_vector <- c(1:6)
-  cluster_vector <- c(1:1)
-  path_file <- "/Users/octo-luma/Desktop/logs/5.9.18.spanner-150threads-to25-15kCustomer-6nodes/application-cluster"
-  
+  #bench_name = "Spanner bench regional - request per second" 
+  #bench_name = "Spanner bench regional - errors" 
+  #pod_vector <- c(1:6)
+  #cluster_vector <- c(1:1)
+  #path_file <- "/Users/octo-luma/Desktop/logs/5.9.18.spanner-150threads-to25-15kCustomer-6nodes/application-cluster"
+  #e = TRUE
 
 
   application_pod <- NULL
@@ -98,10 +97,13 @@ bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector
   #List of dataframe
   #df_list <- list(data_getproduct, data_insertproduct, data_insertorder, data_transactionvalidation)
   df_list <- list(data_getproduct, data_insertproduct, data_insertorder, data_transactionvalidation)
+  df_error_list <- list(data_error_handleRE, data_error_retry)
   #rename daraframe columns
   df_list <- lapply(df_list, function(x){colnames(x) <- c("time", "action"); return(x)})
+  df_error_list <- lapply(df_error_list, function(x){colnames(x) <- c("time", "action", "error type"); return(x)})
   #removing milisecond from timeseries 
   df_list <- lapply(df_list, function(x){x$time <- str_sub(x$time, 1, str_length(x$time)-4); return(x)})
+  df_error_list <- lapply(df_error_list, function(x){x$time <- str_sub(x$time, 1, str_length(x$time)-4); return(x)})
   
   #Get unique timeseries
   interval <- unique(df_list[[1]]$time)
@@ -111,6 +113,9 @@ bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector
   data_insertproduct_c <- NULL
   data_insertorder_c <- NULL
   data_transactionvalidation_c <- NULL
+  
+  data_error_handleRE_c <- NULL
+  data_error_retry_c <- NULL
 
   
   #Counting request per second
@@ -120,6 +125,8 @@ bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector
     data_insertproduct_c[a] <- count(subset(df_list[[2]], df_list[[2]]$time == paste(i, sep = "")))
     data_insertorder_c[a] <- count(subset(df_list[[3]], df_list[[3]]$time == paste(i, sep = "")))
     data_transactionvalidation_c[a] <- count(subset(df_list[[4]], df_list[[4]]$time == paste(i, sep = "")))
+    data_error_handleRE_c[a] <- count(subset(df_error_list[[1]], df_error_list[[1]]$time == paste(i, sep = "")))
+    data_error_retry_c[a] <- count(subset(df_error_list[[2]], df_error_list[[2]]$time == paste(i, sep = "")))
     a <- a+1
   }
   
@@ -128,13 +135,17 @@ bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector
   
   #List of dataframe
   df_list_c <- list(data_getproduct_c, data_insertproduct_c, data_insertorder_c, data_transactionvalidation_c)
+  df_error_list_c <- list(data_error_handleRE_c, data_error_retry_c)
   #List to dataframe
   df_list_c <- lapply(df_list_c, function(x){x <- as.data.frame(x); return(x)})
+  df_error_list_c <- lapply(df_error_list_c, function(x){x <- as.data.frame(x); return(x)})
   
   #Building our dataframe (timeseries, count(request), index(timeseries))
   df_list_c <- lapply(df_list_c, function(x){x <- data.frame(interval, t(x), c(1:length(x))); return(x)})
+  df_error_list_c <- lapply(df_error_list_c, function(x){x <- data.frame(interval, t(x), c(1:length(x))); return(x)})
   #rename list columns
   df_list_c <- lapply(df_list_c, function(x){colnames(x) <- c("timestamp", "res", "index"); return(x)})
+  df_error_list_c <- lapply(df_error_list_c, function(x){colnames(x) <- c("timestamp", "res", "index"); return(x)})
   
   #dataframe list to dataframe 
   data_getproduct_c <- as.data.frame(df_list_c[1])
@@ -142,36 +153,58 @@ bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector
   data_insertorder_c <- as.data.frame(df_list_c[3])
   data_transactionvalidation_c <- as.data.frame(df_list_c[4])
   
+  data_error_handleRE_c <- as.data.frame(df_error_list_c[1])
+  data_error_retry_c <- as.data.frame(df_error_list_c[2])
+  
   if(scale_max == 0) {
     scale_max1 <- nrow(data_getproduct_c)
     scale_max2 <- nrow(data_insertproduct_c)
     scale_max3 <- nrow(data_insertorder_c)
     scale_max4 <- nrow(data_transactionvalidation_c)
+    scale_error_max1 <- nrow(data_error_handleRE_c)
+    scale_error_max2 <- nrow(data_error_retry_c)
+    
   } else {
     scale_max1 <- scale_max
     scale_max2 <- scale_max
     scale_max3 <- scale_max
     scale_max4 <- scale_max
+    scale_error_max1 <- scale_max
+    scale_error_max2 <- scale_max
   }
-  seq_len <- 2
   
-  ggplot(NULL, aes(index, res)) + 
-    #Four plots
-    geom_line(data = data_getproduct_c[seq(scale_min, scale_max1, seq_len), ], aes(colour = 'getProductByProductId')) + 
-    geom_line(data = data_insertproduct_c[seq(scale_min, scale_max2, seq_len), ], aes(colour = 'insertProductOrder')) + 
-    geom_line(data = data_insertorder_c[seq(scale_min, scale_max3, seq_len), ], aes(colour = 'insertOrder')) + 
-    geom_line(data = data_transactionvalidation_c[seq(scale_min, scale_max4, seq_len), ], aes(colour = 'validationOrder')) + 
-    #smooth (http://faculty.chicagobooth.edu/richard.hahn/teaching/formulanotation.pdf)
-    #geom_smooth(data = data_getproduct_c, aes(group = 1, colour = 'getProductByProductId')) +
-    #geom_smooth(data = data_insertproduct_c, aes(group = 1, colour = 'insertProductOrder')) +
-    #geom_smooth(data = data_insertorder_c, aes(group = 1, colour = 'insertOrder' )) +
-    #geom_smooth(data = data_transactionvalidation_c, aes(group = 1, colour = 'validationOrder' )) +
-    #Legend
+  
+  if(e == FALSE) {
+    seq_len <- 2
+    ggplot(NULL, aes(index, res)) + 
+      #Four plots
+      geom_line(data = data_getproduct_c[seq(scale_min, scale_max1, seq_len), ], aes(colour = 'getProductByProductId')) + 
+      geom_line(data = data_insertproduct_c[seq(scale_min, scale_max2, seq_len), ], aes(colour = 'insertProductOrder')) + 
+      geom_line(data = data_insertorder_c[seq(scale_min, scale_max3, seq_len), ], aes(colour = 'insertOrder')) + 
+      geom_line(data = data_transactionvalidation_c[seq(scale_min, scale_max4, seq_len), ], aes(colour = 'validationOrder')) + 
+      #smooth (http://faculty.chicagobooth.edu/richard.hahn/teaching/formulanotation.pdf)
+      #geom_smooth(data = data_getproduct_c, aes(group = 1, colour = 'getProductByProductId')) +
+      #geom_smooth(data = data_insertproduct_c, aes(group = 1, colour = 'insertProductOrder')) +
+      #geom_smooth(data = data_insertorder_c, aes(group = 1, colour = 'insertOrder' )) +
+      #geom_smooth(data = data_transactionvalidation_c, aes(group = 1, colour = 'validationOrder' )) +
+      #Legend
+      ggtitle(bench_name) + 
+      expand_limits(x = scale_min, y = 0) +
+      xlab("Time (second)") + 
+      ylab("Request") +
+      theme_light() 
+    
+  } else {
+    seq_len <- 1
+    ggplot(NULL, aes(index, res)) +
+    geom_line(data = data_error_handleRE_c[seq(scale_min, scale_error_max1, seq_len), ], aes(colour = 'handleError')) + 
+    geom_line(data = data_error_retry_c[seq(scale_min, scale_error_max2, seq_len), ], aes(colour = 'retry')) + 
     ggtitle(bench_name) + 
     expand_limits(x = scale_min, y = 0) +
     xlab("Time (second)") + 
     ylab("Request") +
-    theme_light() 
+    theme_light()
+  }
   
   return(ggplotly())
   #returnList <- list("graph" = ggplotly(), "timeAbscisse" = interval)
@@ -179,8 +212,7 @@ bench_multicluster <- function(bench_name, pod_vector, path_file, cluster_vector
 }
 
 
-## TODO merge error function with regular function to have a nice abscisse scale
-bench_multicluster_error <- function(bench_name, pod_vector, path_file, cluster_vector, scale_min=0, scale_max=0, interval){
+#bench_multicluster_error <- function(bench_name, pod_vector, path_file, cluster_vector, scale_min=0, scale_max=0, interval){
   
   # parametres en durs pour les tests
   #bench_name = "Spanner bench regional - request per second" 
@@ -315,8 +347,15 @@ bench_multicluster_histograms <- function(pod_vector, path_file, cluster_vector,
   #bigdata <- rbind(application_cluster1_pod1)
   bigdata <- rbind(application_cluster1_pod1, application_cluster1_pod2, application_cluster1_pod3, application_cluster1_pod4, application_cluster1_pod5, application_cluster1_pod6)#, application_cluster1_pod4, application_cluster1_pod5, application_cluster2_pod1, application_cluster2_pod2, application_cluster2_pod3, application_cluster2_pod4, application_cluster2_pod5, application_cluster3_pod1, application_cluster3_pod2, application_cluster3_pod3, application_cluster3_pod4, application_cluster3_pod5)
   #df reduction col1: timestamp, col2: action
+  errors <- data.frame(bigdata$V2, bigdata$V3, bigdata$V7, bigdata$V31)
   bigdata <- data.frame(bigdata$V2, bigdata$V7)
   
+  errors <- subset(errors, errors$bigdata.V3 == "[ERROR]")
+  errors <- data.frame(errors$bigdata.V2, errors$bigdata.V7, errors$bigdata.V31)
+  
+  data_error_insertPO <- subset(errors, errors$errors.bigdata.V7 == "insertProductOrder")
+  data_error_retry    <- subset(errors, errors$errors.bigdata.V31 == "RETRY")
+  data_error_handleRE <- subset(errors, errors$errors.bigdata.V7 == "handleRequestError")
   
   
   
@@ -466,8 +505,8 @@ bench_multicluster_error_histograms <- function(pod_vector, path_file, cluster_v
   errors <- subset(errors, errors$errors.V3 == "[ERROR]")
   errors <- data.frame(errors$errors.V2, errors$errors.V7, errors$errors.V31)
   
-  
   data_error_insertPO <- subset(errors, errors$errors.errors.V7 == "insertProductOrder")
+  data_error_retry    <- subset(errors, errors$errors.errors.V31 == "RETRY")
   data_error_handleRE <- subset(errors, errors$errors.errors.V7 == "handleRequestError")
   
   
@@ -476,7 +515,7 @@ bench_multicluster_error_histograms <- function(pod_vector, path_file, cluster_v
   
   #List of dataframe
   #df_list <- list(data_getproduct, data_insertproduct, data_insertorder, data_transactionvalidation)
-  df_list <- list(data_error_insertPO, data_error_handleRE)
+  df_list <- list(data_error_retry, data_error_handleRE)
   #rename daraframe columns
   df_list <- lapply(df_list, function(x){colnames(x) <- c("time", "error type", "more info"); return(x)})
   #removing milisecond from timeseries 
@@ -488,11 +527,12 @@ bench_multicluster_error_histograms <- function(pod_vector, path_file, cluster_v
   #initialization of dataframe c 
   data_error_insertPO_c <- NULL
   data_error_handleRE_c <- NULL
+  data_error_retry_c <- NULL
   
   #Counting request per second
   a <- 1
   for(i in interval){
-    data_error_insertPO_c[a] <- count(subset(df_list[[1]], df_list[[1]]$time == paste(i, sep = "")))
+    data_error_retry_c[a] <- count(subset(df_list[[1]], df_list[[1]]$time == paste(i, sep = "")))
     data_error_handleRE_c[a] <- count(subset(df_list[[2]], df_list[[2]]$time == paste(i, sep = "")))
     a <- a+1
   }
@@ -511,7 +551,7 @@ bench_multicluster_error_histograms <- function(pod_vector, path_file, cluster_v
   df_list_c <- lapply(df_list_c, function(x){colnames(x) <- c("timestamp", "res", "index"); return(x)})
   
   #dataframe list to dataframe 
-  data_error_insertPO_c <- as.data.frame(df_list_c[1])
+  data_error_retry_c <- as.data.frame(df_list_c[1])
   data_error_handleRE_c <- as.data.frame(df_list_c[2])
   
   
@@ -521,14 +561,14 @@ bench_multicluster_error_histograms <- function(pod_vector, path_file, cluster_v
   
   
   ## error insert product order
-  percentiles_error_PO <- quantile(data_error_insertPO_c$res, c(.50, .95, .99, .999, .9999))
-  error_insertPO_h <- ggplot(data_error_insertPO_c, aes(res)) + geom_histogram(binwidth = 5, color="black", fill="white")
+  percentiles_error_PO <- quantile(data_error_retry_c$res, c(.50, .95, .99, .999, .9999))
+  error_retry_h <- ggplot(data_error_retry_c, aes(res)) + geom_histogram(binwidth = 5, color="black", fill="white")
   #error_insertPO_h <- error_insertPO_h + geom_vline(aes(xintercept=percentiles_error_PO[[1]]), color="blue", linetype="dashed", size=1)
   #error_insertPO_h <- error_insertPO_h + geom_vline(aes(xintercept=percentiles_error_PO[[2]]), color="green", linetype="dashed", size=1)
   #error_insertPO_h <- error_insertPO_h + geom_vline(aes(xintercept=percentiles_error_PO[[3]]), color="yellow", linetype="dashed", size=1)
   #error_insertPO_h <- error_insertPO_h + geom_vline(aes(xintercept=percentiles_error_PO[[4]]), color="purple", linetype="dashed", size=1)
   #error_insertPO_h <- error_insertPO_h + geom_vline(aes(xintercept=percentiles_error_PO[[5]]), color="red", linetype="dashed", size=1)
-  error_insertPO_h <- error_insertPO_h + ggtitle("error insert PO") + theme_light() + xlim(scale_min, scale_max)
+  error_retry_h <- error_retry_h + ggtitle("retry") + theme_light() + xlim(scale_min, scale_max)
   
   
   ## error handle request
@@ -542,7 +582,7 @@ bench_multicluster_error_histograms <- function(pod_vector, path_file, cluster_v
   error_handleRE_h <- error_handleRE_h + ggtitle("error handle request") + theme_light() + xlim(scale_min, scale_max)
   
   
-  histograms_full <- multiplot(error_insertPO_h, error_handleRE_h, cols=1)
+  histograms_full <- multiplot(error_retry_h, error_handleRE_h, cols=1)
   return(ggplotly(histograms_full))
   
 }
@@ -552,6 +592,7 @@ pod <- c(1:6)
 cluster <- c(1:1)
 path <- "/Users/octo-luma/Desktop/logs/5.9.18.spanner-150threads-to25-15kCustomer-6nodes/application-cluster"
 
+
 hist_scale_min= 0
 hist_scale_max = 2500
 
@@ -559,12 +600,14 @@ hist_scale_max = 2500
 bench_multicluster(bench_name = "Spanner bench regional - request per second", 
       pod_vector = pod, 
       path_file = path,
+      e = FALSE,
       cluster_vector = cluster, 0, 0)
 
-bench_multicluster_error(bench_name = "Errors", 
+bench_multicluster(bench_name = "Spanner bench regional - errors", 
                    pod_vector = pod, 
                    path_file = path,
-                   cluster_vector = cluster, 0, 0, firstTest[[2]])
+                   e = TRUE,
+                   cluster_vector = cluster, 0, 0)
 
 bench_multicluster_histograms(pod_vector = pod, 
                               path_file = path,
